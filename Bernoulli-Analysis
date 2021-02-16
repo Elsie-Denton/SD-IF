@@ -1,0 +1,660 @@
+###
+### Reanalysis of Seedling Defoliation-Intensity and Frequency ### data after review
+### main objectives include spatial variability in hierarcial ### model and incorperate updated priors
+
+###
+### Bernoulli regression is second should actually estimate ###surivial probability
+
+
+### used tutorial below to figure out syntax
+### https://poissonisfish.com/2019/05/01/bayesian-models-in-r/
+### and then the actual rethinking guide for the Bernoulli model
+###http://xcelab.net/R/rethinking_package.pdf
+###
+### data is in surivial by seedling form
+###
+### Elsie M Denton
+### 27 Nov 2020
+###
+
+### clear working directory
+
+rm(list=ls())
+
+### set working directory
+
+setwd("C:/Users/elsie.denton/Documents/Projects/SD-IF/Data/2018/Second_Year_Survival_w_Analysis/Final/")
+dir()
+
+### load data
+
+df<-read.csv("SD-IF_CompiledDataToShare_byseedling.csv", sep=",", header=T)
+head(df)
+
+### load libraries
+library(rethinking)
+library(tidyverse)
+library(magrittr)
+library(readxl)
+
+### make new columns for categorical data
+
+head(df)
+
+df$Trt30x1<-ifelse(df$Trt=="30x1",1,0)
+df$Trt30x2<-ifelse(df$Trt=="30x2",1,0)
+df$Trt70x1<-ifelse(df$Trt=="70x1",1,0)
+df$Trt70x2<-ifelse(df$Trt=="70x2",1,0)
+
+
+### make sure data is happy
+
+df %<>% mutate(Plot = as.integer(factor(Plot)),
+                Trt30x1 = as.integer((Trt30x1)),
+                Trt30x2 = as.integer((Trt30x2)),
+                Trt70x1 = as.integer((Trt70x1)),
+                Trt70x2 = as.integer((Trt70x2)),
+               )
+head(df)
+### subset by species
+dfPOSE<-subset(df,Species=="POSE")
+dfPSSP<-subset(df,Species=="PSSP")
+dfAGCR<-subset(df,Species=="AGCR")
+head(dfPOSE)
+
+
+### begin website code, Year 1 outcomes, POSE
+
+inv.logit<-function(x){
+exp(x)/(1+exp(x))
+}
+POSEsurvY1_bern  <- map2stan(alist(
+      Fate17 ~ dbinom(1,p),
+     logit(p) <- a + a_block[Block] + b_30x1*Trt30x1 + b_30x2*Trt30x2 + b_70x1*Trt70x1 + b_70x2*Trt70x2,
+      c(b_30x1, b_30x2, b_70x1, b_70x2) ~ dnorm(0, 2),
+      a ~ dnorm(logit(.75),sigma1),
+      a_block[Block] ~ dnorm(0,sigma2),
+    c(sigma1, sigma2) ~ dcauchy(0, 1)),
+      
+   data = dfPOSE,
+      iter = 20000, warmup = 2000, chains = 4, cores = 4)
+
+# Check posterior dists
+precis(POSEsurvY1_bern, prob = .95) # use depth = 2 for varying intercept
+
+
+inv.logit(4)#seems to restrict to between 0 and 1
+logitlink(.9)#seems to expand to real number scale
+
+# Sample posterior
+post <- extract.samples(POSEsurvY1_bern)
+names(post)
+
+
+# Run simulations w/ averages of all predictors, except parasite 0 / 1
+
+p0_POSEY1 <- inv.logit(post$a + 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+plot(density(p0_POSEY1))
+
+p30x1_POSEY1 <- inv.logit(post$a+ 1*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x1_POSEY1),col="red")
+p30x2_POSEY1 <- inv.logit(post$a+ 0*post$b_30x1 + 1*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x2_POSEY1),col="orange")
+p70x1_POSEY1 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 1*post$b_70x1 + 0*post$b_70x2)
+lines(density(p70x1_POSEY1),col="blue")
+p70x2_POSEY1 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 1*post$b_70x2)
+lines(density(p70x2_POSEY1),col="green")
+
+
+### POSE Year 2, to make sure this will run when one of the treatments has no surviviors
+
+POSEsurvY2_bern  <- map2stan(alist(
+      Fate18 ~ dbinom(1,p),
+     logit(p) <- a + a_block[Block] + b_30x1*Trt30x1 + b_30x2*Trt30x2 + b_70x1*Trt70x1 + b_70x2*Trt70x2,
+      c(b_30x1, b_30x2, b_70x1, b_70x2) ~ dnorm(0, 2),
+      a ~ dnorm(logit(.09),sigma1),
+      a_block[Block] ~ dnorm(0,sigma2),
+    c(sigma1, sigma2) ~ dcauchy(0, 1)),
+      
+   data = dfPOSE,
+      iter = 20000, warmup = 2000, chains = 4, cores = 4)
+
+# Check posterior dists
+precis(POSEsurvY2_bern, prob = .95) # use depth = 2 for varying intercept
+
+# Sample posterior
+post <- extract.samples(POSEsurvY2_bern)
+names(post)
+
+
+p0_POSEY2 <- inv.logit(post$a + 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+plot(density(p0_POSEY2))
+
+p30x1_POSEY2 <- inv.logit(post$a+ 1*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x1_POSEY2),col="red")
+p30x2_POSEY2 <- inv.logit(post$a+ 0*post$b_30x1 + 1*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x2_POSEY2),col="orange")
+p70x1_POSEY2 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 1*post$b_70x1 + 0*post$b_70x2)
+lines(density(p70x1_POSEY2),col="blue")
+p70x2_POSEY2 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 1*post$b_70x2)
+lines(density(p70x2_POSEY2),col="green")
+
+
+### PSSP surivival Year 1
+
+PSSPsurvY1_bern  <- map2stan(alist(
+      Fate17 ~ dbinom(1,p),
+     logit(p) <- a + a_block[Block] + b_30x1*Trt30x1 + b_30x2*Trt30x2 + b_70x1*Trt70x1 + b_70x2*Trt70x2,
+      c(b_30x1, b_30x2, b_70x1, b_70x2) ~ dnorm(0, 2),
+      a ~ dnorm(logit((0.796+0.85)/2),sigma1),
+      a_block[Block] ~ dnorm(0,sigma2),
+    c(sigma1, sigma2) ~ dcauchy(0, 1)),
+      
+   data = dfPSSP,
+      iter = 20000, warmup = 2000, chains = 4, cores = 4)
+
+# Check posterior dists
+precis(PSSPsurvY1_bern, prob = .95) # use depth = 2 for varying intercept
+
+
+# Sample posterior
+post <- extract.samples(PSSPsurvY1_bern)
+
+# Run simulations w/ averages of all predictors, except parasite 0 / 1
+
+p0_PSSPY1 <- inv.logit(post$a + 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+plot(density(p0_PSSPY1))
+
+p30x1_PSSPY1 <- inv.logit(post$a+ 1*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x1_PSSPY1),col="red")
+p30x2_PSSPY1 <- inv.logit(post$a+ 0*post$b_30x1 + 1*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x2_PSSPY1),col="orange")
+p70x1_PSSPY1 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 1*post$b_70x1 + 0*post$b_70x2)
+lines(density(p70x1_PSSPY1),col="blue")
+p70x2_PSSPY1 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 1*post$b_70x2)
+lines(density(p70x2_PSSPY1),col="green")
+
+### PSSP Year 2
+
+PSSPsurvY2_bern  <- map2stan(alist(
+      Fate18 ~ dbinom(1,p),
+     logit(p) <- a + a_block[Block] + b_30x1*Trt30x1 + b_30x2*Trt30x2 + b_70x1*Trt70x1 + b_70x2*Trt70x2,
+      c(b_30x1, b_30x2, b_70x1, b_70x2) ~ dnorm(0, 2),
+      a ~ dnorm(logit((.61+.123)/2),sigma1),
+      a_block[Block] ~ dnorm(0,sigma2),
+    c(sigma1, sigma2) ~ dcauchy(0, 1)),
+      
+   data = dfPSSP,
+      iter = 20000, warmup = 2000, chains = 4, cores = 4)
+
+# Check posterior dists
+precis(PSSPsurvY2_bern, prob = .95) # use depth = 2 for varying intercept
+
+# Sample posterior
+post <- extract.samples(PSSPsurvY2_bern)
+names(post)
+
+
+p0_PSSPY2 <- inv.logit(post$a + 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+plot(density(p0_PSSPY2))
+
+p30x1_PSSPY2 <- inv.logit(post$a+ 1*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x1_PSSPY2),col="red")
+p30x2_PSSPY2 <- inv.logit(post$a+ 0*post$b_30x1 + 1*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x2_PSSPY2),col="orange")
+p70x1_PSSPY2 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 1*post$b_70x1 + 0*post$b_70x2)
+lines(density(p70x1_PSSPY2),col="blue")
+p70x2_PSSPY2 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 1*post$b_70x2)
+lines(density(p70x2_PSSPY2),col="green")
+
+
+
+
+
+### AGCR Year 1, the place we are most likely to see differences
+
+AGCRsurvY1_bern  <- map2stan(alist(
+      Fate17 ~ dbinom(1,p),
+     logit(p) <- a + a_block[Block] + b_30x1*Trt30x1 + b_30x2*Trt30x2 + b_70x1*Trt70x1 + b_70x2*Trt70x2,
+      c(b_30x1, b_30x2, b_70x1, b_70x2) ~ dnorm(0, 2),
+      a ~ dnorm(logit((.802+.89)/2),sigma1),
+      a_block[Block] ~ dnorm(0,sigma2),
+    c(sigma1, sigma2) ~ dcauchy(0, 1)),
+      
+   data = dfAGCR,
+      iter = 20000, warmup = 2000, chains = 4, cores = 4)
+
+# Check posterior dists
+precis(AGCRsurvY1_bern, prob = .95) # use depth = 2 for varying intercept
+
+
+
+# Sample posterior
+post <- extract.samples(AGCRsurvY1_bern)
+
+# Run simulations w/ averages of all predictors, except parasite 0 / 1
+ptemp<-p0
+p0_AGCRY1 <- inv.logit(post$a + 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+plot(density(p0_AGCRY1))
+
+p30x1_AGCRY1 <- inv.logit(post$a+ 1*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x1_AGCRY1),col="red")
+p30x2_AGCRY1 <- inv.logit(post$a+ 0*post$b_30x1 + 1*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x2_AGCRY1),col="orange")
+p70x1_AGCRY1 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 1*post$b_70x1 + 0*post$b_70x2)
+lines(density(p70x1_AGCRY1),col="blue")
+p70x2_AGCRY1 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 1*post$b_70x2)
+lines(density(p70x2_AGCRY1),col="green")
+
+
+
+### AGCR Year 2, 
+
+AGCRsurvY2_bern  <- map2stan(alist(
+      Fate18 ~ dbinom(1,p),
+     logit(p) <- a + a_block[Block] + b_30x1*Trt30x1 + b_30x2*Trt30x2 + b_70x1*Trt70x1 + b_70x2*Trt70x2,
+      c(b_30x1, b_30x2, b_70x1, b_70x2) ~ dnorm(0, 2),
+      a ~ dnorm(logit((.146+.69)/2),sigma1),
+      a_block[Block] ~ dnorm(0,sigma2),
+    c(sigma1, sigma2) ~ dcauchy(0, 1)),
+      
+   data = dfAGCR,
+      iter = 20000, warmup = 2000, chains = 4, cores = 4)
+
+# Check posterior dists
+precis(AGCRsurvY2_bern, prob = .95) # use depth = 2 for varying intercept
+
+
+
+# Sample posterior
+post <- extract.samples(AGCRsurvY2_bern)
+
+p0_AGCRY2 <- inv.logit(post$a + 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+plot(density(p0_AGCRY2))
+
+p30x1_AGCRY2 <- inv.logit(post$a+ 1*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x1_AGCRY2),col="red")
+p30x2_AGCRY2 <- inv.logit(post$a+ 0*post$b_30x1 + 1*post$b_30x2 + 0*post$b_70x1 + 0*post$b_70x2)
+lines(density(p30x2_AGCRY2),col="orange")
+p70x1_AGCRY2 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 1*post$b_70x1 + 0*post$b_70x2)
+lines(density(p70x1_AGCRY2),col="blue")
+p70x2_AGCRY2 <- inv.logit(post$a+ 0*post$b_30x1 + 0*post$b_30x2 + 0*post$b_70x1 + 1*post$b_70x2)
+lines(density(p70x2_AGCRY2),col="green")
+
+
+### combine datasets
+POSEY1<-cbind(p0_POSEY1,p30x1_POSEY1,p30x2_POSEY1,p70x1_POSEY1,p70x2_POSEY1) 
+POSEY2<-cbind(p0_POSEY2,p30x1_POSEY2,p30x2_POSEY2,p70x1_POSEY2,p70x2_POSEY2) 
+
+PSSPY1<-cbind(p0_PSSPY1,p30x1_PSSPY1,p30x2_PSSPY1,p70x1_PSSPY1,p70x2_PSSPY1) 
+PSSPY2<-cbind(p0_PSSPY2,p30x1_PSSPY2,p30x2_PSSPY2,p70x1_PSSPY2,p70x2_PSSPY2)
+
+AGCRY1<-cbind(p0_AGCRY1,p30x1_AGCRY1,p30x2_AGCRY1,p70x1_AGCRY1,p70x2_AGCRY1) 
+AGCRY2<-cbind(p0_AGCRY2,p30x1_AGCRY2,p30x2_AGCRY2,p70x1_AGCRY2,p70x2_AGCRY2) 
+
+###quick means
+## POSEY1 and Y2
+mean(c(mean(p0_POSEY1),mean(p30x1_POSEY1),mean(p30x2_POSEY1),mean(p70x1_POSEY1),mean(p70x2_POSEY1)))
+mean(c(mean(p0_POSEY2),mean(p30x1_POSEY2),mean(p30x2_POSEY2),mean(p70x1_POSEY2),mean(p70x2_POSEY2)))
+
+## PSSPY1 and Y2
+mean(c(mean(p0_PSSPY1),mean(p30x1_PSSPY1),mean(p30x2_PSSPY1),mean(p70x1_PSSPY1),mean(p70x2_PSSPY1)))
+mean(c(mean(p0_PSSPY2),mean(p30x1_PSSPY2),mean(p30x2_PSSPY2),mean(p70x1_PSSPY2),mean(p70x2_PSSPY2)))
+
+## AGCRY1 and Y2
+mean(c(mean(p0_AGCRY1),mean(p30x1_AGCRY1),mean(p30x2_AGCRY1),mean(p70x1_AGCRY1),mean(p70x2_AGCRY1)))
+mean(c(mean(p0_AGCRY2),mean(p30x1_AGCRY2),mean(p30x2_AGCRY2),mean(p70x1_AGCRY2),mean(p70x2_AGCRY2)))
+mean(p0_AGCRY1)
+
+###
+### probability survival
+###
+
+
+means.out<-function(ds.1){
+
+theta1<-c(ds.1[,1])
+theta2<-c(ds.1[,2])
+theta3<-c(ds.1[,3])
+theta4<-c(ds.1[,4])
+theta5<-c(ds.1[,5])
+col.1<-as.data.frame(c(mean(theta1),mean(theta2),mean(theta3),mean(theta4),mean(theta5)))
+names(col.1)<-"prob.survival.mean"
+
+col.2n3<-rbind(quantile(theta1,c(0.025,0.975)),quantile(theta2,c(0.025,0.975)),
+quantile(theta3,c(0.025,0.975)),
+quantile(theta4,c(0.025,0.975)),
+quantile(theta5,c(0.025,0.975)))
+
+diff<-as.data.frame(col.1-col.1[1,])
+names(diff)<-"diff from control"
+
+### probability different from control
+
+#SET<-cbind(col.1,col.2n3,col.4,col.5)
+SET<-cbind(col.1,col.2n3,diff)
+
+return(SET)
+}
+
+
+means.out(AGCRY1)
+means.out(AGCRY2)
+
+means.out(PSSPY1)
+means.out(PSSPY2)
+
+means.out(POSEY1)
+means.out(POSEY2)
+
+####  View Trace Plot and M-H acceptance rate 
+####
+length(p70x2_AGCRY2)
+
+plot.trace<-function(dataset){
+par(mfrow=c(3,2))
+plot(dataset[,1],type="l",ylab="p0")
+plot(dataset[,2],type="l",ylab=expression(p30x1))
+plot(dataset[,3],type="l",ylab=expression(p30x2))
+plot(dataset[,4],type="l",ylab=expression(p70x1))
+plot(dataset[,5],type="l",ylab=expression(p70x2))
+
+}
+
+plot.trace(POSEY1)
+plot.trace(POSEY2)
+
+
+plot.trace(PSSPY1)
+plot.trace(PSSPY2)
+
+
+plot.trace(AGCRY1)
+plot.trace(AGCRY2)
+
+
+
+####
+#### use violin graphs instead
+####
+
+#### note treatment must be factor I think
+data_summary <- function(x) {
+   m <- mean(x,na.rm=TRUE)
+   ymin <- m-sd(x)*1.96
+   ymax <- m+sd(x)*1.96
+   return(c(y=m,ymin=ymin,ymax=ymax))
+}
+
+
+violin.graphs<-function(ds.1){
+TRT.1<-rep("Control",length(ds.1[,1]))
+P.TRT1<-as.numeric(ds.1[,1])
+TRT.2<-rep("30x1",length(ds.1[,1]))
+P.TRT2<-as.numeric(ds.1[,2])
+TRT.3<-rep("30x2",length(ds.1[,1]))
+P.TRT3<-as.numeric(ds.1[,3])
+TRT.4<-rep("70x1",length(ds.1[,1]))
+P.TRT4<-as.numeric(ds.1[,4])
+TRT.5<-rep("70x2",length(ds.1[,1]))
+P.TRT5<-as.numeric(ds.1[,5])
+
+
+fit.1<-data.frame(TRT.1,P.TRT1)
+names(fit.1)<-c("TRT","P")
+fit.2<-data.frame(TRT.2,P.TRT2)
+names(fit.2)<-c("TRT","P")
+fit.3<-data.frame(TRT.3,P.TRT3)
+names(fit.3)<-c("TRT","P")
+fit.4<-data.frame(TRT.4,P.TRT4)
+names(fit.4)<-c("TRT","P")
+fit.5<-data.frame(TRT.5,P.TRT5)
+names(fit.5)<-c("TRT","P")
+
+FIT<-rbind(fit.1,fit.2,fit.3,fit.4,fit.5)
+
+library(ggplot2)
+p<-ggplot(FIT, aes(x=TRT, y=P, fill=TRT)) + 
+  geom_violin(trim=TRUE)+
+  scale_y_continuous(expand = c(0, 0), limits = c(0,1))
+
+greycolors<-c("white","grey","black","grey","black")
+
+
+q<-p+scale_fill_manual(values=greycolors) + theme_classic()+
+theme(axis.ticks.length=unit(-0.25, "cm"), axis.text.x = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")), axis.text.y = element_text(margin=unit(c(0.5,0.5,0.5,0.5), "cm")))+
+labs(title="",x="Defoliation Level", y = "% Survival")
+
+print(q)
+}
+
+
+### print graphs
+
+### make sure to turn on graph tracking before running this code so 
+### you can see both graphs produced
+### click in graphics window, Then chose history from the file menu 
+### and turn on tracking with the first option
+### use page up and page down to navigate between graphs
+
+
+violin.graphs(POSEY1)
+violin.graphs(POSEY2)
+
+violin.graphs(PSSPY1)
+violin.graphs(PSSPY2)
+
+violin.graphs(AGCRY1)
+violin.graphs(AGCRY2)
+
+
+####
+#### probablyity that treatments are different from each other
+####
+
+# probability that ____ is greater than distrubution 1
+
+compare.means<-function(ds.1){
+
+#randomize samples
+t1<-sample(ds.1[,1])
+t2<-sample(ds.1[,2])
+t3<-sample(ds.1[,3])
+t4<-sample(ds.1[,4])
+t5<-sample(ds.1[,5])
+
+#probability that treatment is less than control by .2
+col.1<-as.data.frame(rep(0,5))
+col.1[1,]<-1-ecdf(t1-t1)(.2)
+col.1[2,]<-1-ecdf(t1-t2)(0.2)
+col.1[3,]<-1-ecdf(t1-t3)(0.2)
+col.1[4,]<-1-ecdf(t1-t4)(0.2)
+col.1[5,]<-1-ecdf(t1-t5)(0.2)
+names(col.1)<-c("p.less.than.control.2")
+
+
+#probability that treatment is less than control by .1
+col.2<-as.data.frame(rep(0,5))
+col.2[1,]<-1-ecdf(t1-t1)(.1)
+col.2[2,]<-1-ecdf(t1-t2)(0.1)
+col.2[3,]<-1-ecdf(t1-t3)(0.1)
+col.2[4,]<-1-ecdf(t1-t4)(0.1)
+col.2[5,]<-1-ecdf(t1-t5)(0.1)
+names(col.2)<-c("p.less.than.control.1")
+
+#probability that treatment is less than control by .05
+col.3<-as.data.frame(rep(0,5))
+col.3[1,]<-1-ecdf(t1-t1)(.05)
+col.3[2,]<-1-ecdf(t1-t2)(0.05)
+col.3[3,]<-1-ecdf(t1-t3)(0.05)
+col.3[4,]<-1-ecdf(t1-t4)(0.05)
+col.3[5,]<-1-ecdf(t1-t5)(0.05)
+names(col.3)<-c("p.less.than.control.05")
+
+
+#probability that treatment is greater than control by at least .05
+col.4<-as.data.frame(rep(0,5))
+col.4[1,]<-1-ecdf(t1-t1)(0.05)
+col.4[2,]<-1-ecdf(t2-t1)(0.05)
+col.4[3,]<-1-ecdf(t3-t1)(0.05)
+col.4[4,]<-1-ecdf(t4-t1)(0.05)
+col.4[5,]<-1-ecdf(t5-t1)(0.05)
+names(col.4)<-c("p.more.at.05")
+
+#probability that treatment is greater than control by at least .1
+col.5<-as.data.frame(rep(0,5))
+col.5[1,]<-1-ecdf(t1-t1)(0.1)
+col.5[2,]<-1-ecdf(t2-t1)(0.1)
+col.5[3,]<-1-ecdf(t3-t1)(0.1)
+col.5[4,]<-1-ecdf(t4-t1)(0.1)
+col.5[5,]<-1-ecdf(t5-t1)(0.1)
+names(col.5)<-c("p.more.at.1")
+
+#probability that treatment is greater than control by at least .2
+col.6<-as.data.frame(rep(0,5))
+col.6[1,]<-1-ecdf(t1-t1)(0.2)
+col.6[2,]<-1-ecdf(t2-t1)(0.2)
+col.6[3,]<-1-ecdf(t3-t1)(0.2)
+col.6[4,]<-1-ecdf(t4-t1)(0.2)
+col.6[5,]<-1-ecdf(t5-t1)(0.2)
+names(col.6)<-c("p.more.at.2")
+
+combine<-cbind(col.1,col.2,col.3,col.4,col.5,col.6)
+
+
+print(combine)
+}
+
+
+compare.means(AGCRY1)
+compare.means(AGCRY2)
+
+compare.means(PSSPY1)
+compare.means(PSSPY2)
+
+compare.means(POSEY1)
+compare.means(POSEY2)
+
+
+####
+#### contrasts of interest
+
+#### new contrasts of interest
+#### 1x vs control, 2x vs control, defoliation vs control
+#### 30 vs control and 70 vs control 
+
+
+
+posterior.contrasts<-function(ds.1){
+
+#shorten names for ease of entry
+#randomize samples
+t1<-sample(ds.1[,1])
+t2<-sample(ds.1[,2])
+t3<-sample(ds.1[,3])
+t4<-sample(ds.1[,4])
+t5<-sample(ds.1[,5])
+
+#proportion of (a) distribution that is less than (b) distrubution by at least .2
+out.1<-as.data.frame(rep(0,7))
+
+out.1[1,]<-1-ecdf(c(t1,t1)-c(t2,t3))(0.2)  # 30 vs control
+out.1[2,]<-1-ecdf(c(t1,t1)-c(t4,t5))(0.2)  # 70 vs control
+
+out.1[3,]<-1-ecdf(c(t4,t5)-c(t2,t3))(0.2) # 30 vs 70
+out.1[4,]<-1-ecdf(c(t3,t5)-c(t2,t4))(0.2)  # 1x vs 2x
+out.1[5,]<-1-ecdf(c(t1,t1)-c(t2,t4))(0.2) # 1x vs control
+out.1[6,]<-1-ecdf(c(t1,t1)-c(t3,t5))(0.2) # 2x vs control
+out.1[7,]<-1-ecdf(c(t1,t1,t1,t1)-c(t2,t3,t4,t5))(0.2) # defoliation vs control
+
+
+#proportion of (a) distribution that is less than (b) distrubution by at least .1
+out.2<-as.data.frame(rep(0,7))
+
+out.2[1,]<-1-ecdf(c(t1,t1)-c(t2,t3))(0.1)  # 30 vs control
+out.2[2,]<-1-ecdf(c(t1,t1)-c(t4,t5))(0.1)  # 70 vs control
+
+out.2[3,]<-1-ecdf(c(t4,t5)-c(t2,t3))(0.1) # 30 vs 70
+out.2[4,]<-1-ecdf(c(t3,t5)-c(t2,t4))(0.1)  # 1x vs 2x
+out.2[5,]<-1-ecdf(c(t1,t1)-c(t2,t4))(0.1) # 1x vs control
+out.2[6,]<-1-ecdf(c(t1,t1)-c(t3,t5))(0.1) # 2x vs control
+out.2[7,]<-1-ecdf(c(t1,t1,t1,t1)-c(t2,t3,t4,t5))(0.1) # defoliation vs control
+
+#proportion of (a) distribution that is less than (b) distrubution by at least .05
+out.3<-as.data.frame(rep(0,7))
+
+out.3[1,]<-1-ecdf(c(t1,t1)-c(t2,t3))(0.05)  # 30 vs control
+out.3[2,]<-1-ecdf(c(t1,t1)-c(t4,t5))(0.05)  # 70 vs control
+
+out.3[3,]<-1-ecdf(c(t4,t5)-c(t2,t3))(0.05) # 30 vs 70
+out.3[4,]<-1-ecdf(c(t3,t5)-c(t2,t4))(0.05)  # 1x vs 2x
+out.3[5,]<-1-ecdf(c(t1,t1)-c(t2,t4))(0.05) # 1x vs control
+out.3[6,]<-1-ecdf(c(t1,t1)-c(t3,t5))(0.05) # 2x vs control
+out.3[7,]<-1-ecdf(c(t1,t1,t1,t1)-c(t2,t3,t4,t5))(0.05) # defoliation vs control
+
+
+#proportion of (a) distribution that is greater than (b) distrubution by at least .05
+out.4<-as.data.frame(rep(0,7))
+
+out.4[1,]<-1-ecdf(c(t2,t3)-c(t1,t1))(0.05)  # 30 vs control
+out.4[2,]<-1-ecdf(c(t4,t5)-c(t1,t1))(0.05)  # 70 vs control
+
+out.4[3,]<-1-ecdf(c(t2,t3)-c(t4,t5))(0.05) # 30 vs 70
+out.4[4,]<-1-ecdf(c(t2,t4)-c(t3,t5))(0.05)  # 1x vs 2x
+out.4[5,]<-1-ecdf(c(t2,t4)-c(t1,t1))(0.05) # 1x vs control
+out.4[6,]<-1-ecdf(c(t3,t5)-c(t1,t1))(0.05) # 2x vs control
+out.4[7,]<-1-ecdf(c(t2,t3,t4,t5)-c(t1,t1,t1,t1))(0.05) # defoliation vs control
+
+
+#proportion of (a) distribution that is greater than (b) distrubution by at least .1
+out.5<-as.data.frame(rep(0,7))
+
+out.5[1,]<-1-ecdf(c(t2,t3)-c(t1,t1))(0.1)  # 30 vs control
+out.5[2,]<-1-ecdf(c(t4,t5)-c(t1,t1))(0.1)  # 70 vs control
+
+out.5[3,]<-1-ecdf(c(t2,t3)-c(t4,t5))(0.1) # 30 vs 70
+out.5[4,]<-1-ecdf(c(t2,t4)-c(t3,t5))(0.1)  # 1x vs 2x
+out.5[5,]<-1-ecdf(c(t2,t4)-c(t1,t1))(0.1) # 1x vs control
+out.5[6,]<-1-ecdf(c(t3,t5)-c(t1,t1))(0.1) # 2x vs control
+out.5[7,]<-1-ecdf(c(t2,t3,t4,t5)-c(t1,t1,t1,t1))(0.1) # defoliation vs control
+
+
+#proportion of (a) distribution that is greater than (b) distrubution by at least .2
+out.6<-as.data.frame(rep(0,7))
+out.6[1,]<-1-ecdf(c(t2,t3)-c(t1,t1))(0.05)  # 30 vs control
+out.6[2,]<-1-ecdf(c(t4,t5)-c(t1,t1))(0.05)  # 70 vs control
+
+out.6[3,]<-1-ecdf(c(t2,t3)-c(t4,t5))(0.2) # 30 vs 70
+out.6[4,]<-1-ecdf(c(t2,t4)-c(t3,t5))(0.2)  # 1x vs 2x
+out.6[5,]<-1-ecdf(c(t2,t4)-c(t1,t1))(0.2) # 1x vs control
+out.6[6,]<-1-ecdf(c(t3,t5)-c(t1,t1))(0.2) # 2x vs control
+out.6[7,]<-1-ecdf(c(t2,t3,t4,t5)-c(t1,t1,t1,t1))(0.2) # defoliation vs control
+
+out<-as.data.frame(rep(NA,7))
+out<-c("30 vs con", "70 vs con",  "30 vs 70","x1 vs x2","1x vs Control","2x vs control","defoliation vs control")
+names(out.1)<-"p a < b by .2"
+names(out.2)<-"p a < b by .1"
+names(out.3)<-"p a < b by .05"
+names(out.4)<-"p a > b by .05"
+names(out.5)<-"p a > b by .1"
+names(out.6)<-"p a > b by .2"
+
+compile<-cbind(out,out.1,out.2,out.3,out.4,out.5,out.6)
+return(compile)
+
+}
+
+
+posterior.contrasts(AGCRY1)
+posterior.contrasts(AGCRY2)
+
+posterior.contrasts(PSSPY1)
+posterior.contrasts(PSSPY2)
+
+posterior.contrasts(POSEY1)
+posterior.contrasts(POSEY2)
+
+
+
+
+
